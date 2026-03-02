@@ -1,4 +1,7 @@
 package com.aynur.payment.security.rbac;
 
-public class Roles {
+public enum Roles {
+    ROLE_ADMIN,
+    ROLE_EDITOR,
+    ROLE_VIEWER
 }
