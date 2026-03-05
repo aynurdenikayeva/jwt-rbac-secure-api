@@ -6,22 +6,44 @@ spring:
     url: jdbc:postgresql://localhost:5432/paymentdb
     username: postgres
     password: postgres
+
   jpa:
     hibernate:
       ddl-auto: update
     properties:
       hibernate:
         format_sql: true
+    open-in-view: false
+
   data:
     redis:
       host: localhost
       port: 6379
+      timeout: 2s
 
 app:
   jwt:
-    secret: change-me-to-a-long-secret
+    secret: "change-me-to-a-long-secret-change-me-to-a-long-secret"
     expiration-minutes: 60
 
 stripe:
-  api-key: sk_test_change_me
-  webhook-secret: whsec_change_me
+  api-key: ${STRIPE_API_KEY:}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    org.springframework.security: DEBUG

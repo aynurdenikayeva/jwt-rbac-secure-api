@@ -1,13 +1,17 @@
 package com.aynur.payment.security.jwt;
 
-import io.jsonwebtoken.*;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Date;
 
 @Service
 public class JwtService {
@@ -19,7 +23,7 @@ public class JwtService {
     private long expirationMinutes;
 
     private Key key() {
-        // secret ən az ~32 simvol olsun
+        // secret ən az 32 simvol olmalıdır (HS256 üçün)
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 

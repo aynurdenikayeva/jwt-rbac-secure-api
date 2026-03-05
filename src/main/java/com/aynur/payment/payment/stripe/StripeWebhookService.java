@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class StripeWebhookService {
 
-    @Value("${stripe.webhook-secret}")
+    @Value("${stripe.webhook-secret:}")
     private String webhookSecret;
 
     private final WebhookEventLogRepository eventLogRepository;
@@ -26,13 +26,15 @@ public class StripeWebhookService {
     private final PdfReceiptService pdfReceiptService;
 
     public void handle(String payload, String signatureHeader) {
-
         try {
+            if (webhookSecret == null || webhookSecret.isBlank()) {
+                throw new IllegalStateException("stripe.webhook-secret is missing (set STRIPE_WEBHOOK_SECRET env or stripe.webhook-secret in yml)");
+            }
+
             Event event = Webhook.constructEvent(payload, signatureHeader, webhookSecret);
 
-            // idempotency: eyni event 2 dəfə gəlməsin
             if (eventLogRepository.findByStripeEventId(event.getId()).isPresent()) {
-                return;
+                return; // idempotency
             }
 
             eventLogRepository.save(WebhookEventLog.builder()
@@ -42,36 +44,28 @@ public class StripeWebhookService {
                     .createdAt(DateUtil.now())
                     .build());
 
-            // ---- checkout.session.completed ----
             if ("checkout.session.completed".equals(event.getType())) {
-
-                StripeObject stripeObject = event.getDataObjectDeserializer()
-                        .getObject()
-                        .orElse(null);
+                StripeObject stripeObject = event.getDataObjectDeserializer().getObject().orElse(null);
 
                 if (stripeObject instanceof Session session) {
-
-                    String orderIdStr = session.getMetadata() != null
-                            ? session.getMetadata().get("orderId")
-                            : null;
+                    String orderIdStr = session.getMetadata() != null ? session.getMetadata().get("orderId") : null;
 
                     if (orderIdStr != null) {
                         Long orderId = Long.valueOf(orderIdStr);
-
                         Order o = orderRepository.findById(orderId).orElse(null);
+
                         if (o != null) {
                             o.setStatus("COMPLETED");
                             o.setCompletedAt(DateUtil.now());
                             orderRepository.save(o);
 
-                            // PDF receipt yarat
                             pdfReceiptService.generateForOrder(o);
                         }
                     }
                 }
             }
         } catch (Exception e) {
-            throw new RuntimeException("Webhook error: " + e.getMessage());
+            throw new RuntimeException("Webhook error: " + e.getMessage(), e);
         }
     }
 }
