@@ -16,50 +16,46 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
-
     private final JwtAuthenticationFilter jwtFilter;
     private final AccessDeniedHandlerImpl accessDeniedHandler;
 
     @Bean
     public SecurityFilterChain chain(HttpSecurity http) throws Exception {
-
         http.csrf(csrf -> csrf.disable());
-
-        // JWT -> session istifadə etmirik
-        http.sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
-
-        // request cache/session-a "Saved request ..." yazmasın
+        http.sessionManagement(sm ->
+                sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+        );
         http.requestCache(rc -> rc.disable());
 
-        // default login/basic şeylərini söndür
         http.httpBasic(b -> b.disable());
         http.formLogin(f -> f.disable());
-
         http.exceptionHandling(ex -> ex
                 .accessDeniedHandler(accessDeniedHandler)
         );
-
         http.authorizeHttpRequests(auth -> auth
-                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                .requestMatchers(
+                        "/",
+                        "/error",
+                        "/favicon.ico",
+                        "/swagger-ui/**",
+                        "/swagger-ui.html",
+                        "/v3/api-docs/**",
+                        "/actuator/**"
+                ).permitAll()
 
-                // auth + webhook public
+                // public business endpoints
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers("/webhooks/stripe").permitAll()
-
-                // admin
+                // admin endpoints
                 .requestMatchers("/admin/**").hasRole("ADMIN")
-
-                // order create yalnız editor/admin
+                // order creation only editor/admin
                 .requestMatchers(HttpMethod.POST, "/orders").hasAnyRole("EDITOR", "ADMIN")
-
-                // qalan order endpointləri authenticated
+                // all other order endpoints require login
                 .requestMatchers("/orders/**").authenticated()
-
+                // everything else requires login
                 .anyRequest().authenticated()
         );
-
         http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
-
         return http.build();
     }
 }

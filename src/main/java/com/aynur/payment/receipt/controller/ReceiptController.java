@@ -18,7 +18,6 @@ import java.nio.file.Path;
 @RequiredArgsConstructor
 @RequestMapping("/orders")
 public class ReceiptController {
-
     private final OrderRepository orderRepository;
     private final ReceiptRepository receiptRepository;
 
@@ -26,13 +25,11 @@ public class ReceiptController {
     public ResponseEntity<Resource> download(@PathVariable Long id) {
         Long userId = CurrentUser.id();
         if (userId == null) throw new UnauthorizedException("Unauthorized");
-
         Order o = orderRepository.findById(id).orElseThrow(() -> new NotFoundException("Order not found"));
         if (!o.getUserId().equals(userId)) throw new UnauthorizedException("Forbidden");
         if (!"COMPLETED".equals(o.getStatus())) throw new UnauthorizedException("Receipt available only for COMPLETED");
 
         Receipt r = receiptRepository.findByOrderId(id).orElseThrow(() -> new NotFoundException("Receipt not found"));
-
         Path p = Path.of(r.getFilePath());
         Resource resource = new FileSystemResource(p);
 

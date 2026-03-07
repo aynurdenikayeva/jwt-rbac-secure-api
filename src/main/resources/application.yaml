@@ -28,7 +28,7 @@ app:
 
 stripe:
   api-key: ${STRIPE_API_KEY:}
-  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+  webhook-secret:  whsec_6b3ac0b872f6fe4471b55bdd3018d63893003c33608e563634b97040c61ea19c
 
 springdoc:
   api-docs:

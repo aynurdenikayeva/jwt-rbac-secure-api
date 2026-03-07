@@ -2,7 +2,7 @@ package com.aynur.payment.domain.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-
+import jakarta.persistence.Column;
 import java.time.LocalDateTime;
 
 @Entity
@@ -27,6 +27,7 @@ public class Order {
     private String description;
 
     private String stripeSessionId;
+    @Column(columnDefinition = "TEXT")
     private String stripeSessionUrl;
 
     @Column(nullable = false)

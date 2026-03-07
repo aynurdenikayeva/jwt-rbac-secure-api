@@ -7,17 +7,17 @@ import com.aynur.payment.domain.repository.OrderRepository;
 import com.aynur.payment.domain.repository.WebhookEventLogRepository;
 import com.aynur.payment.receipt.service.PdfReceiptService;
 import com.stripe.model.Event;
-import com.stripe.model.StripeObject;
 import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class StripeWebhookService {
-
     @Value("${stripe.webhook-secret:}")
     private String webhookSecret;
 
@@ -30,41 +30,56 @@ public class StripeWebhookService {
             if (webhookSecret == null || webhookSecret.isBlank()) {
                 throw new IllegalStateException("stripe.webhook-secret is missing (set STRIPE_WEBHOOK_SECRET env or stripe.webhook-secret in yml)");
             }
-
             Event event = Webhook.constructEvent(payload, signatureHeader, webhookSecret);
+            log.info("Stripe webhook received. type={}, id={}", event.getType(), event.getId());
 
             if (eventLogRepository.findByStripeEventId(event.getId()).isPresent()) {
-                return; // idempotency
+                log.info("Stripe webhook skipped as duplicate. id={}", event.getId());
+                return;
             }
-
             eventLogRepository.save(WebhookEventLog.builder()
                     .stripeEventId(event.getId())
                     .type(event.getType())
                     .payloadSummary(payload.length() > 1000 ? payload.substring(0, 1000) : payload)
                     .createdAt(DateUtil.now())
                     .build());
-
-            if ("checkout.session.completed".equals(event.getType())) {
-                StripeObject stripeObject = event.getDataObjectDeserializer().getObject().orElse(null);
-
-                if (stripeObject instanceof Session session) {
-                    String orderIdStr = session.getMetadata() != null ? session.getMetadata().get("orderId") : null;
-
-                    if (orderIdStr != null) {
-                        Long orderId = Long.valueOf(orderIdStr);
-                        Order o = orderRepository.findById(orderId).orElse(null);
-
-                        if (o != null) {
-                            o.setStatus("COMPLETED");
-                            o.setCompletedAt(DateUtil.now());
-                            orderRepository.save(o);
-
-                            pdfReceiptService.generateForOrder(o);
-                        }
-                    }
-                }
+            if (!"checkout.session.completed".equals(event.getType())) {
+                log.info("Ignoring Stripe event type={}", event.getType());
+                return;
             }
+
+            Session session = (Session) event.getDataObjectDeserializer().deserializeUnsafe();
+
+            String orderIdStr = session.getMetadata() != null ? session.getMetadata().get("orderId") : null;
+            log.info("Stripe session metadata={}", session.getMetadata());
+
+            if (orderIdStr == null || orderIdStr.isBlank()) {
+                log.warn("orderId metadata missing in checkout.session.completed. eventId={}", event.getId());
+                return;
+            }
+
+            Long orderId = Long.valueOf(orderIdStr);
+            Order o = orderRepository.findById(orderId).orElse(null);
+
+            if (o == null) {
+                log.warn("Order not found for webhook. orderId={}", orderId);
+                return;
+            }
+
+            o.setStatus("COMPLETED");
+            o.setCompletedAt(DateUtil.now());
+            orderRepository.save(o);
+            log.info("Order marked COMPLETED. orderId={}", o.getId());
+
+            try {
+                pdfReceiptService.generateForOrder(o);
+                log.info("Receipt generated. orderId={}", o.getId());
+            } catch (Exception receiptEx) {
+                log.error("Receipt generation failed for orderId={}", o.getId(), receiptEx);
+            }
+
         } catch (Exception e) {
+            log.error("Stripe webhook processing failed", e);
             throw new RuntimeException("Webhook error: " + e.getMessage(), e);
         }
     }
